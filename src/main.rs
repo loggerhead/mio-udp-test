@@ -23,7 +23,10 @@ fn str2socketaddr(s: &str) -> Result<SocketAddr> {
 }
 
 impl Resolver {
-    pub fn new(token: Token, server: &str) -> Result<Resolver> {
+    fn new(token: Token, server: &str) -> Result<Resolver> {
+        #[cfg(feature = "localhost")]
+        let addr = "127.0.0.1:0";
+        #[cfg(not(feature = "localhost"))]
         let addr = "0.0.0.0:0";
         let addr = str2socketaddr(addr)?;
         let server = str2socketaddr(server)?;
@@ -35,10 +38,6 @@ impl Resolver {
             server: server,
             receive_buf: Some(Vec::with_capacity(BUF_SIZE)),
         })
-    }
-
-    pub fn get_token(&self) -> Token {
-        self.token
     }
 
     fn send_request(&self, data: &[u8]) -> Result<()> {
@@ -75,7 +74,7 @@ impl Resolver {
         res
     }
 
-    pub fn handle_events(&mut self, poll: &Poll, events: Ready) -> Result<()> {
+    fn handle_events(&mut self, poll: &Poll, events: Ready) -> Result<()> {
         if events.is_error() {
             let e = self.sock
                 .take_error()?
@@ -90,16 +89,12 @@ impl Resolver {
             if self.receive_buf.as_ref().unwrap().is_empty() {
                 Err(Error::new(ErrorKind::Other, "receive buffer is empty"))
             } else {
-                self.handle_recevied();
+                let receive_buf = self.receive_buf.take().unwrap();
+                println!("received[{}]: {:?}", receive_buf.len(), receive_buf);
+                self.receive_buf = Some(receive_buf);
                 Ok(())
             }
         }
-    }
-
-    fn handle_recevied(&mut self) {
-        let receive_buf = self.receive_buf.take().unwrap();
-        println!("received[{}]: {:?}", receive_buf.len(), receive_buf);
-        self.receive_buf = Some(receive_buf);
     }
 
     fn do_register(&mut self, poll: &Poll, is_reregister: bool) -> Result<()> {
@@ -119,11 +114,12 @@ impl Resolver {
         }
     }
 
-    pub fn register(&mut self, poll: &Poll) -> Result<()> {
+    fn register(&mut self, poll: &Poll) -> Result<()> {
         self.do_register(poll, false)
     }
 
-    pub fn reregister(&mut self, poll: &Poll) -> Result<()> {
+    #[allow(dead_code)]
+    fn reregister(&mut self, poll: &Poll) -> Result<()> {
         self.do_register(poll, true)
     }
 }
