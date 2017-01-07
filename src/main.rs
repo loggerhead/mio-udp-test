@@ -99,10 +99,15 @@ impl Resolver {
 
     fn do_register(&mut self, poll: &Poll, is_reregister: bool) -> Result<()> {
         let events = Ready::readable();
-        #[cfg(not(feature = "oneshot"))]
-        let pollopts = PollOpt::edge();
-        #[cfg(feature = "oneshot")]
-        let pollopts = PollOpt::edge() | PollOpt::oneshot();
+        let pollopts = if cfg!(feature = "level") {
+            PollOpt::level()
+        } else {
+            if cfg!(feature = "oneshot") {
+                PollOpt::edge() | PollOpt::oneshot()
+            } else {
+                PollOpt::edge()
+            }
+        };
         println!("pollopts = {:?}", pollopts);
 
         if is_reregister {

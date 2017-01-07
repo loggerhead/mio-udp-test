@@ -3,8 +3,10 @@
 ```bash
 pip install oh
 oh &
-# edge without reregister
+# edge
 cargo run
+# level
+cargo run --features "level"
 # edge | oneshot with reregister
 cargo run --features "oneshot reregister2"
 ```

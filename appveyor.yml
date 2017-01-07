@@ -19,5 +19,12 @@ test_script:
   - ps: Start-Process oh
   # edge without reregister
   - cargo run
+  # level
+  - cargo run --features "level"
   # edge | oneshot with reregister
   - cargo run --features "oneshot reregister2"
+
+notifications:
+  - on_build_success: false
+    on_build_failure: false
+    on_build_status_changed: false
