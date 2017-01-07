@@ -1,0 +1,26 @@
+language: rust
+rust:
+  - stable
+
+os:
+  - linux
+  - osx
+
+sudo: false
+cache:
+  - cargo
+  - pip
+before_script:
+  - pip install --user oh
+  - export PATH=$HOME/.local/bin:$HOME/.cargo/bin:$HOME/Library/Python/2.7/bin/:$PATH
+script:
+  - oh &
+  # edge without reregister
+  - cargo run
+  # edge | oneshot with reregister
+  - cargo run --features "oneshot reregister2"
+
+notifications:
+  email:
+    on_failure: never
+    on_success: never

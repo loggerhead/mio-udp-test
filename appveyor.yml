@@ -1,0 +1,23 @@
+build: false
+
+environment:
+  PYTHON: "C:\\Python27"
+  PYTHON_VERSION: "2.7.12"
+
+  matrix:
+    - TARGET: x86_64-pc-windows-msvc
+
+install:
+  - curl -sSf -o rustup-init.exe https://win.rustup.rs/
+  - rustup-init.exe -y --default-host %TARGET%
+  - set PATH=%PATH%;C:\Users\appveyor\.cargo\bin;%PYTHON%/Scripts/
+  - rustc -V
+  - cargo -V
+  - pip install oh
+
+test_script:
+  - ps: Start-Process oh
+  # edge without reregister
+  - cargo run
+  # edge | oneshot with reregister
+  - cargo run --features "oneshot reregister2"
