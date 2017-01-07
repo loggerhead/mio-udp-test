@@ -1,0 +1,13 @@
+[package]
+name = "mio-udp-test"
+version = "0.1.0"
+authors = ["loggerhead <lloggerhead@gmail.com>"]
+license = "MIT"
+
+[dependencies]
+mio = "0.6"
+
+[features]
+oneshot = []
+reregister1 = []
+reregister2 = []
