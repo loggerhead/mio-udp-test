@@ -17,12 +17,12 @@ install:
 
 test_script:
   - ps: Start-Process oh
-  # edge without reregister
-  - cargo run
+  # edge | oneshot with reregister
+  - cargo run --features "oneshot reregister"
   # level
   - cargo run --features "level"
-  # edge | oneshot with reregister
-  - cargo run --features "oneshot reregister2"
+  # edge without reregister
+  - cargo run
 
 notifications:
   - on_build_success: false

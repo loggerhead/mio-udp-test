@@ -15,12 +15,12 @@ before_script:
   - export PATH=$HOME/.local/bin:$HOME/.cargo/bin:$HOME/Library/Python/2.7/bin/:$PATH
 script:
   - oh &
-  # edge without reregister
-  - cargo run
+  # edge | oneshot with reregister
+  - cargo run --features "oneshot reregister"
   # level
   - cargo run --features "level"
-  # edge | oneshot with reregister
-  - cargo run --features "oneshot reregister2"
+  # edge without reregister
+  - cargo run
 
 notifications:
   email:
