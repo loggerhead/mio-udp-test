@@ -8,7 +8,7 @@ cargo run
 # level
 cargo run --features "level"
 # edge | oneshot with reregister
-cargo run --features "oneshot reregister2"
+cargo run --features "oneshot reregister"
 ```
 
 # CI log
