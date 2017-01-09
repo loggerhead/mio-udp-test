@@ -1,180 +1,86 @@
 extern crate mio;
 
-use std::slice::from_raw_parts_mut;
 use std::str::FromStr;
 use std::time::Duration;
 use std::net::SocketAddr;
-use std::io::{Result, Error, ErrorKind};
 
 use mio::*;
 use mio::udp::UdpSocket;
 
+const SERVER_ADDR: &'static str = "127.0.0.1:9000";
 const BUF_SIZE: usize = 1024;
-
-pub struct Resolver {
-    token: Token,
-    sock: UdpSocket,
-    server: SocketAddr,
-    receive_buf: Option<Vec<u8>>,
-}
-
-fn str2socketaddr(s: &str) -> Result<SocketAddr> {
-    SocketAddr::from_str(s).map_err(|e| Error::new(ErrorKind::Other, e))
-}
-
-impl Resolver {
-    fn new(token: Token, server: &str) -> Result<Resolver> {
-        #[cfg(feature = "localhost")]
-        let addr = "127.0.0.1:0";
-        #[cfg(not(feature = "localhost"))]
-        let addr = "0.0.0.0:0";
-        let addr = str2socketaddr(addr)?;
-        let server = str2socketaddr(server)?;
-        let sock = UdpSocket::bind(&addr)?;
-
-        Ok(Resolver {
-            token: token,
-            sock: sock,
-            server: server,
-            receive_buf: Some(Vec::with_capacity(BUF_SIZE)),
-        })
-    }
-
-    fn send_request(&self, data: &[u8]) -> Result<()> {
-        if let Some(nwrited) = self.sock.send_to(&data, &self.server)? {
-            println!("writed {}/{}", nwrited, data.len());
-        } else {
-            println!("writed nothing");
-        }
-        Ok(())
-    }
-
-    fn receive_data_into_buf(&mut self) -> Result<()> {
-        let mut res = Ok(());
-        let mut buf = self.receive_buf.take().unwrap();
-        // get writable slice from vec
-        let ptr = buf.as_mut_ptr();
-        let cap = buf.capacity();
-        let buf_slice = unsafe { &mut from_raw_parts_mut(ptr, cap) };
-        unsafe {
-            buf.set_len(0);
-        }
-
-        match self.sock.recv_from(buf_slice) {
-            Ok(None) => {}
-            Ok(Some((nread, addr))) => {
-                unsafe {
-                    buf.set_len(nread);
-                }
-                println!("received data from {:?}", addr);
-            }
-            Err(e) => res = Err(From::from(e)),
-        }
-        self.receive_buf = Some(buf);
-        res
-    }
-
-    fn handle_events(&mut self, poll: &Poll, events: Ready) -> Result<()> {
-        if events.is_error() {
-            let e = self.sock
-                .take_error()?
-                .or(Some(Error::new(ErrorKind::Other, "event error")))
-                .unwrap();
-            let _ = poll.deregister(&self.sock);
-            self.register(poll)?;
-            Err(e)
-        } else {
-            self.receive_data_into_buf()?;
-
-            if self.receive_buf.as_ref().unwrap().is_empty() {
-                Err(Error::new(ErrorKind::Other, "receive buffer is empty"))
-            } else {
-                let receive_buf = self.receive_buf.take().unwrap();
-                println!("received[{}]: {:?}", receive_buf.len(), receive_buf);
-                self.receive_buf = Some(receive_buf);
-                Ok(())
-            }
-        }
-    }
-
-    fn do_register(&mut self, poll: &Poll, is_reregister: bool) -> Result<()> {
-        let events = Ready::readable();
-        let pollopts = if cfg!(feature = "level") {
-            PollOpt::level()
-        } else {
-            if cfg!(feature = "oneshot") {
-                PollOpt::edge() | PollOpt::oneshot()
-            } else {
-                PollOpt::edge()
-            }
-        };
-        println!("pollopts = {:?}", pollopts);
-
-        if is_reregister {
-            poll.reregister(&self.sock, self.token, events, pollopts)
-                .map_err(From::from)
-        } else {
-            poll.register(&self.sock, self.token, events, pollopts)
-                .map_err(From::from)
-        }
-    }
-
-    fn register(&mut self, poll: &Poll) -> Result<()> {
-        self.do_register(poll, false)
-    }
-
-    #[allow(dead_code)]
-    fn reregister(&mut self, poll: &Poll) -> Result<()> {
-        self.do_register(poll, true)
-    }
-}
-
-const TIMEOUT: u64 = 5;
-const RESOLVER_TOKEN: Token = Token(0);
+const UDP_TOKEN: Token = Token(0);
 const TESTS: &'static [&'static str] = &["hi, guys",
                                          "good morning",
                                          "see you later"];
+
 fn main() {
-    let server = "127.0.0.1:9000";
-    let poll_timeout = Duration::new(TIMEOUT, 0);
-    let mut resolver = Resolver::new(RESOLVER_TOKEN, &server).unwrap();
+    let timeout = Duration::new(5, 0);
+    let server_addr = SocketAddr::from_str(SERVER_ADDR).unwrap();
+    let sock = UdpSocket::bind(&SocketAddr::from_str("127.0.0.1:0").unwrap()).unwrap();
     let poll = Poll::new().unwrap();
-    resolver.register(&poll).unwrap();
     let mut events = Events::with_capacity(1024);
-    for hostname in TESTS {
-        match query(hostname, &mut resolver, &poll, &mut events, poll_timeout) {
-            Err(e) => println!("ERROR: {}", e),
-            _ => {}
+    let pollopts = if cfg!(feature = "level") {
+        PollOpt::level()
+    } else {
+        if cfg!(feature = "oneshot") {
+            PollOpt::edge() | PollOpt::oneshot()
+        } else {
+            PollOpt::edge()
+        }
+    };
+
+    poll.register(&sock, UDP_TOKEN, Ready::readable(), pollopts).unwrap();
+
+    // send to echo server
+    for test in TESTS {
+        match sock.send_to(test.as_bytes(), &server_addr) {
+            Ok(Some(nwrite)) => println!("writed {}/{}", nwrite, test.len()),
+            Ok(None) => println!("writed nothing"),
+            Err(e) => println!("send_to error {}", e),
         }
     }
-}
 
-fn query(hostname: &'static str,
-         resolver: &mut Resolver,
-         poll: &Poll,
-         events: &mut Events,
-         timeout: Duration) -> Result<()> {
-    println!("<--------- {}", hostname);
-
-    let _ = resolver.send_request(hostname.as_bytes())?;
-
-    // TODO: debug
-    while poll.poll(events, Some(timeout))? == 0 {
-        println!("ERROR: timeout of {}", hostname);
-    }
-
-    for event in events.iter() {
-        println!("{:?}", event);
-        match event.token() {
-            RESOLVER_TOKEN => {
-                #[cfg(feature = "reregister1")]
-                resolver.reregister(&poll)?;
-                resolver.handle_events(&poll, event.kind())?;
-                #[cfg(feature = "reregister2")]
-                resolver.reregister(&poll)?;
+    let mut cnt = TESTS.len();
+    let mut failed_cnt = TESTS.len() * 2;
+    while cnt > 0 && failed_cnt > 0 {
+        match poll.poll(&mut events, Some(timeout)) {
+            Ok(0) => println!("poll nothing or timeout"),
+            Err(e) => println!("poll error: {}", e),
+            _ => {
+                failed_cnt += 1;
             }
-            _ => unreachable!(),
+        }
+        failed_cnt -= 1;
+
+        for event in events.iter() {
+            println!("{:?}", event);
+            match event.token() {
+                UDP_TOKEN => {
+                    if event.kind().is_error() {
+                        let e = sock.take_error().unwrap();
+                        println!("event error: {:?}", e);
+                        return;
+                    }
+
+                    // read response from echo server
+                    if event.kind().is_readable() {
+                        let buf = &mut [0u8; BUF_SIZE];
+                        match sock.recv_from(buf) {
+                            Ok(None) => println!("recv_from blocked"),
+                            Ok(Some((nread, addr))) => {
+                                println!("{:?} [{}] => {:?}", addr, nread, &buf[..nread]);
+                            }
+                            Err(e) => println!("recv_from error: {}", e),
+                        }
+                    }
+
+                    #[cfg(feature = "reregister")]
+                    poll.reregister(&sock, UDP_TOKEN, Ready::readable(), pollopts).unwrap();
+                    cnt -= 1;
+                }
+                _ => unreachable!(),
+            }
         }
     }
-    Ok(())
 }

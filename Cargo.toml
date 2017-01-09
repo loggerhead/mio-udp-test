@@ -8,8 +8,6 @@ license = "MIT"
 mio = "0.6"
 
 [features]
-localhost = []
 level = []
 oneshot = []
-reregister1 = []
-reregister2 = []
+reregister = []
